@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const Database = require('better-sqlite3');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
@@ -9,48 +10,91 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Inicializar banco de dados
-const dbPath = process.env.NODE_ENV === 'production' ? '/tmp/veiculos.db' : path.join(__dirname, 'veiculos.db');
-const db = new Database(dbPath);
+// Configurar diretório do banco de dados
+let dbPath;
+if (process.env.VERCEL) {
+  // No Vercel, usar /tmp (diretório temporário)
+  dbPath = '/tmp/veiculos.db';
+} else {
+  // Localmente, usar a pasta do projeto
+  dbPath = path.join(__dirname, 'veiculos.db');
+}
+
+// Criar diretório se não existir (apenas localmente)
+if (!process.env.VERCEL) {
+  const dir = path.dirname(dbPath);
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+}
+
+let db;
+try {
+  db = new Database(dbPath);
+} catch (err) {
+  console.error('Erro ao conectar ao banco:', err);
+  process.exit(1);
+}
 
 // Criar tabela se não existir
 function initDB() {
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS veiculos (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      placa TEXT UNIQUE NOT NULL,
-      marca TEXT NOT NULL,
-      modelo TEXT NOT NULL,
-      ano INTEGER NOT NULL,
-      cor TEXT NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  // Inserir dados de exemplo se tabela estiver vazia
-  const count = db.prepare('SELECT COUNT(*) as count FROM veiculos').get();
-  if (count.count === 0) {
-    const insert = db.prepare(`
-      INSERT INTO veiculos (placa, marca, modelo, ano, cor) 
-      VALUES (?, ?, ?, ?, ?)
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS veiculos (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        placa TEXT UNIQUE NOT NULL,
+        marca TEXT NOT NULL,
+        modelo TEXT NOT NULL,
+        ano INTEGER NOT NULL,
+        cor TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
     `);
 
-    const veiculos = [
-      ['ABC1234', 'Toyota', 'Corolla', 2023, 'Prata'],
-      ['XYZ5678', 'Honda', 'Civic', 2022, 'Preto'],
-      ['DEF9012', 'Volkswagen', 'Gol', 2021, 'Vermelho'],
-      ['GHI3456', 'Fiat', 'Palio', 2020, 'Branco'],
-      ['JKL7890', 'Hyundai', 'HB20', 2023, 'Azul']
-    ];
+    // Inserir dados de exemplo se tabela estiver vazia
+    const count = db.prepare('SELECT COUNT(*) as count FROM veiculos').get();
+    if (count.count === 0) {
+      const insert = db.prepare(`
+        INSERT INTO veiculos (placa, marca, modelo, ano, cor) 
+        VALUES (?, ?, ?, ?, ?)
+      `);
 
-    veiculos.forEach(veiculo => insert.run(...veiculo));
-    console.log('✅ Banco de dados inicializado com dados de exemplo!');
+      const veiculos = [
+        ['ABC1234', 'Toyota', 'Corolla', 2023, 'Prata'],
+        ['XYZ5678', 'Honda', 'Civic', 2022, 'Preto'],
+        ['DEF9012', 'Volkswagen', 'Gol', 2021, 'Vermelho'],
+        ['GHI3456', 'Fiat', 'Palio', 2020, 'Branco'],
+        ['JKL7890', 'Hyundai', 'HB20', 2023, 'Azul']
+      ];
+
+      veiculos.forEach(veiculo => insert.run(...veiculo));
+      console.log('✅ Banco de dados inicializado com dados de exemplo!');
+    }
+  } catch (err) {
+    console.error('Erro ao inicializar BD:', err);
   }
 }
 
 initDB();
 
 // ========== ENDPOINTS ==========
+
+// Rota raiz
+app.get('/', (req, res) => {
+  res.json({
+    mensagem: 'API de Veículos 🚗',
+    versao: '1.0.0',
+    status: 'online',
+    endpoints: [
+      'GET /api/saude',
+      'GET /api/veiculos/listar',
+      'GET /api/veiculos/buscar/:placa',
+      'POST /api/veiculos/adicionar',
+      'PUT /api/veiculos/atualizar/:placa',
+      'DELETE /api/veiculos/deletar/:placa'
+    ]
+  });
+});
 
 // Verificar status da API
 app.get('/api/saude', (req, res) => {
@@ -203,22 +247,6 @@ app.delete('/api/veiculos/deletar/:placa', (req, res) => {
   }
 });
 
-// Rota raiz
-app.get('/', (req, res) => {
-  res.json({
-    mensagem: 'API de Veículos 🚗',
-    versao: '1.0.0',
-    endpoints: [
-      'GET /api/saude',
-      'GET /api/veiculos/listar',
-      'GET /api/veiculos/buscar/:placa',
-      'POST /api/veiculos/adicionar',
-      'PUT /api/veiculos/atualizar/:placa',
-      'DELETE /api/veiculos/deletar/:placa'
-    ]
-  });
-});
-
 // Tratamento de erros 404
 app.use((req, res) => {
   res.status(404).json({
@@ -236,6 +264,6 @@ app.listen(PORT, () => {
 
 // Graceful shutdown
 process.on('SIGINT', () => {
-  db.close();
+  if (db) db.close();
   process.exit(0);
 });
