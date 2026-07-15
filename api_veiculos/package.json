@@ -1,0 +1,24 @@
+{
+  "name": "api-veiculos",
+  "version": "1.0.0",
+  "description": "API para buscar informações de veículos pela placa",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": ["api", "veiculos", "placa"],
+  "author": "didinho82",
+  "license": "MIT",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "better-sqlite3": "^9.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
